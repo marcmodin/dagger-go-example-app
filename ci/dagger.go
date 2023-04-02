@@ -80,21 +80,26 @@ func main() {
 		syft := client.Container().From("anchore/syft:latest").File("/syft")
 
 		// Run GoReleaser with Syft
-		release := client.Container().From("goreleaser/goreleaser:latest").
+		release, err := client.Container().From("goreleaser/goreleaser:latest").
 			WithFile("/bin/syft", syft).
 			WithMountedDirectory("/src", directory).WithWorkdir("/src").
 			WithEnvVariable("TINI_SUBREAPER", "true").
 			// WithExec([]string{"--snapshot", "--clean"})
-			WithExec([]string{"check"})
-
-		output := release.Directory(appBuildPath)
-
-		// write contents of container build/ directory to the host
-		_, err = output.Export(ctx, appBuildPath)
+			WithExec([]string{"check"}).Stdout(ctx)
 
 		if err != nil {
 			panic(err)
 		}
+		fmt.Println(release)
+
+		// output := release.Directory(appBuildPath)
+
+		// // write contents of container build/ directory to the host
+		// _, err = output.Export(ctx, appBuildPath)
+
+		// if err != nil {
+		// 	panic(err)
+		// }
 
 		log.Println("Release completed successfully!")
 	}
