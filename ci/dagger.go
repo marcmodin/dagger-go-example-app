@@ -62,13 +62,13 @@ func main() {
 
 	// Get the source code from host directory
 	directory := client.Host().Directory(".", dagger.HostDirectoryOpts{
-		Exclude: []string{
-			"LICENSE",
-			"README.md",
-			"go.sum",
-			"go.work",
-			"ci/*",
-		},
+		// Exclude: []string{
+		// 	"LICENSE",
+		// 	"README.md",
+		// 	"go.sum",
+		// 	"go.work",
+		// 	"ci/*",
+		// },
 	})
 
 	// Release
