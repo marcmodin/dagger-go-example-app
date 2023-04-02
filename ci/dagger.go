@@ -60,40 +60,44 @@ func main() {
 		fmt.Println("Unknown event detected")
 	}
 
-	// // Get the source code from host directory
-	// directory := client.Host().Directory(".", dagger.HostDirectoryOpts{
-	// 	Exclude: []string{
-	// 		"LICENSE",
-	// 		"README.md",
-	// 		"go.sum",
-	// 		"go.work",
-	// 		"ci/*",
-	// 	},
-	// })
+	// Get the source code from host directory
+	directory := client.Host().Directory(".", dagger.HostDirectoryOpts{
+		Exclude: []string{
+			"LICENSE",
+			"README.md",
+			"go.sum",
+			"go.work",
+			"ci/*",
+		},
+	})
 
-	// // Release
+	// Release
 
-	// // Export the syft binary from the container as a file
-	// syft := client.Container().From("anchore/syft:latest").File("/syft")
+	if event == "push" && strings.Contains(ref, "/tags/v") {
+		fmt.Println("Push event detected")
 
-	// // Run GoReleaser with Syft
-	// release := client.Container().From("goreleaser/goreleaser:latest").
-	// 	WithFile("/bin/syft", syft).
-	// 	WithMountedDirectory("/src", directory).WithWorkdir("/src").
-	// 	WithEnvVariable("TINI_SUBREAPER", "true").
-	// 	WithExec([]string{"--snapshot", "--clean"})
+		// Export the syft binary from the container as a file
+		syft := client.Container().From("anchore/syft:latest").File("/syft")
 
-	// output := release.Directory(appBuildPath)
+		// Run GoReleaser with Syft
+		release := client.Container().From("goreleaser/goreleaser:latest").
+			WithFile("/bin/syft", syft).
+			WithMountedDirectory("/src", directory).WithWorkdir("/src").
+			WithEnvVariable("TINI_SUBREAPER", "true").
+			// WithExec([]string{"--snapshot", "--clean"})
+			WithExec([]string{"check"})
 
-	// // write contents of container build/ directory to the host
-	// _, err = output.Export(ctx, appBuildPath)
+		output := release.Directory(appBuildPath)
 
-	// if err != nil {
-	// 	panic(err)
-	// }
+		// write contents of container build/ directory to the host
+		_, err = output.Export(ctx, appBuildPath)
 
-	// log.Println("Release completed successfully!")
+		if err != nil {
+			panic(err)
+		}
 
+		log.Println("Release completed successfully!")
+	}
 	// // Lint
 	// lint, err := client.Container().
 	// 	From(fmt.Sprintf("golangci/golangci-lint:v%s-alpine", golangciLintVersion)).
