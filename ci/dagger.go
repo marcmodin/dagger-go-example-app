@@ -28,9 +28,9 @@ const (
 )
 
 var (
-	token   = os.Getenv("GITHUB_TOKEN")
-	event   = os.Getenv("GITHUB_EVENT")
-	refName = os.Getenv("GITHUB_REF_NAME")
+	token = os.Getenv("GITHUB_TOKEN")
+	event = os.Getenv("GITHUB_EVENT")
+	ref   = os.Getenv("GITHUB_REF")
 )
 
 func init() {
@@ -49,7 +49,7 @@ func main() {
 
 	log.Println("Connected to Dagger")
 
-	fmt.Println(refName)
+	fmt.Println(ref)
 	fmt.Println(event)
 
 	if event == "push" && strings.Contains(ref, "/tags/v") {
