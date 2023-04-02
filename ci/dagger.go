@@ -27,8 +27,9 @@ const (
 )
 
 var (
-	token = os.Getenv("GITHUB_TOKEN")
-	event = os.Getenv("GITHUB_EVENT")
+	token   = os.Getenv("GITHUB_TOKEN")
+	event   = os.Getenv("GITHUB_EVENT")
+	refName = os.Getenv("GITHUB_REF_NAME")
 )
 
 func init() {
@@ -47,6 +48,7 @@ func main() {
 
 	log.Println("Connected to Dagger")
 
+	fmt.Println(refName)
 	fmt.Println(event)
 
 	if event == "push" {
