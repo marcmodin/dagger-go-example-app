@@ -84,8 +84,9 @@ func main() {
 			WithFile("/bin/syft", syft).
 			WithMountedDirectory("/src", directory).WithWorkdir("/src").
 			WithEnvVariable("TINI_SUBREAPER", "true").
-			// WithExec([]string{"--snapshot", "--clean"})
-			WithExec([]string{"check"}).Stdout(ctx)
+			WithEnvVariable("GITHUB_TOKEN", token).
+			WithExec([]string{"--clean"}).
+			Stdout(ctx)
 
 		if err != nil {
 			panic(err)
