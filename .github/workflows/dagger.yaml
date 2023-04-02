@@ -28,5 +28,5 @@ jobs:
         env: 
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_EVENT: ${{ github.event_name }} 
-          GITHUB_REF_NAME: ${{  github.ref_name }}
+          GITHUB_REF: ${{  github.ref }}
         run: go run ci/dagger.go

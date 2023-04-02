@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	// "os/exec"
 
@@ -51,7 +52,7 @@ func main() {
 	fmt.Println(refName)
 	fmt.Println(event)
 
-	if event == "push" {
+	if event == "push" && strings.Contains(ref, "/tags/v") {
 		fmt.Println("Push event detected")
 	} else if event == "pull_request" {
 		fmt.Println("Pull request event detected")
