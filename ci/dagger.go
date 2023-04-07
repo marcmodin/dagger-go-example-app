@@ -6,170 +6,193 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
-
-	// "os/exec"
 
 	"dagger.io/dagger"
 )
 
 // Set the versions of containers used in the pipeline
-const (
-	// https://hub.docker.com/_/golang
-	goVersion = "1.20"
-
-	// https://github.com/golangci/golangci-lint/releases
-	golangciLintVersion = "1.52.2"
+var (
+	goVersion         = "1.20"
+	gosyftVersion     = "v0.76.0"
+	goreleaserVersion = "v1.16.2"
 
 	// app info
 	appName      = "dagger-go-example-app"
-	appVersion   = "0.0.1"
-	appBuildPath = "dist/"
-)
+	appBuildPath = "dist"
 
-var (
-	token = os.Getenv("GITHUB_TOKEN")
-	event = os.Getenv("GITHUB_EVENT")
-	ref   = os.Getenv("GITHUB_REF")
+	err      error
+	res      string
+	is_local bool
 )
 
 func init() {
-	// parse flags
+	flag.BoolVar(&is_local, "local", false, "whether to run locally")
 	flag.Parse()
 }
 
 func main() {
+
+	// Check if a task argument is provided
+	if len(flag.Args()) == 0 {
+		fmt.Println("Missing argument. Expected either 'pull-request' or 'release'.")
+		os.Exit(1)
+	}
+
+	// Check if the task argument is valid
+	task := flag.Arg(0)
+	if task != "pull-request" && task != "release" {
+		fmt.Println("Invalid argument. Expected either 'pull-request' or 'release'.")
+		os.Exit(1)
+	}
+
+	// Dagger client context
 	ctx := context.Background()
 
-	client, err := dagger.Connect(ctx, dagger.WithLogOutput(os.Stdout))
+	// Create a Dagger client
+	client, err := dagger.Connect(ctx)
 	if err != nil {
 		panic(err)
 	}
-	defer client.Close()
+
+	// Always close the client when done or on error.
+	defer func() {
+		log.Printf("Closing Dagger client...")
+		client.Close()
+	}()
 
 	log.Println("Connected to Dagger")
 
-	fmt.Println(ref)
-	fmt.Println(event)
-
-	if event == "push" && strings.Contains(ref, "/tags/v") {
-		fmt.Println("Push event detected")
-	} else if event == "pull_request" {
-		fmt.Println("Pull request event detected")
-	} else {
-		fmt.Println("Unknown event detected")
+	// Run the corresponding task.
+	switch task {
+	case "pull-request":
+		res, err = pullrequest(ctx, client)
+	case "release":
+		res, err = release(ctx, client)
 	}
 
-	// Get the source code from host directory
+	// Handle any errors that occurred during the task execution.
+	if err != nil {
+		// log.Fatalf("Error %s: %+v\n", task, err)
+		panic(fmt.Sprintf("Error %s: %+v\n", task, err))
+
+	}
+
+	log.Println(res)
+}
+
+// Pull Request Task: Runs tests and builds the binary
+//
+// `example: go run ci/dagger.go pull-request `
+func pullrequest(ctx context.Context, client *dagger.Client) (string, error) {
+
+	// Get the source code from host directory and exclude files
 	directory := client.Host().Directory(".", dagger.HostDirectoryOpts{
-		// Exclude: []string{
-		// 	"LICENSE",
-		// 	"README.md",
-		// 	"go.sum",
-		// 	"go.work",
-		// 	"ci/*",
-		// },
+		Exclude: []string{"dist", "vendor", ".git", "ci/*", "go.work"},
 	})
 
-	// Release
+	// Create a go container with the source code mounted
+	golang := client.Container().
+		From(fmt.Sprintf("golang:%s-alpine", goVersion)).
+		WithMountedDirectory("/src", directory).WithWorkdir("/src").
+		WithMountedCache("/go/pkg/mod", client.CacheVolume("gomod")).
+		WithEnvVariable("CGO_ENABLED", "0")
 
-	if event == "push" && strings.Contains(ref, "/tags/v") {
-		fmt.Println("Push event detected")
+	// Run go tests
+	_, err := golang.WithExec([]string{"go", "test", "./..."}).
+		Stderr(ctx)
 
-		// Export the syft binary from the container as a file
-		syft := client.Container().From("anchore/syft:latest").File("/syft")
+	if err != nil {
+		return "", err
+	}
 
-		// Run GoReleaser with Syft
-		release, err := client.Container().From("goreleaser/goreleaser:latest").
-			WithFile("/bin/syft", syft).
-			WithMountedDirectory("/src", directory).WithWorkdir("/src").
-			WithEnvVariable("TINI_SUBREAPER", "true").
-			WithEnvVariable("GITHUB_TOKEN", token).
-			WithExec([]string{"--clean"}).
-			Stdout(ctx)
+	log.Println("Tests passed successfully!")
+
+	// Run go build to check if the binary compiles
+	_, err = golang.WithExec([]string{"go", "build", "-o", fmt.Sprintf("%v/%s", appBuildPath, appName), "."}).Stderr(ctx)
+
+	if err != nil {
+		return "", err
+	}
+
+	return "Build passed successfully!", nil
+}
+
+// Release Task: Runs GoReleaser to creates a Github release
+//
+// `example: go run ci/dagger.go release flags[-l,--local]`
+func release(ctx context.Context, client *dagger.Client) (string, error) {
+
+	// Set the Github token from the host environment as a secret
+	token := client.SetSecret("github_token", os.Getenv("GITHUB_TOKEN"))
+
+	// Get the source code from host directory
+	directory := client.Host().Directory(".")
+
+	// Export the syft binary from the syft container as a file
+	syft := client.Container().From(fmt.Sprintf("anchore/syft:%s", gosyftVersion)).
+		WithMountedCache("/go/pkg/mod", client.CacheVolume("gomod")).
+		File("/syft")
+
+	// Create the GoReleaser container with the syft binary mounted
+	goreleaser := client.Container().From(fmt.Sprintf("goreleaser/goreleaser:%s", goreleaserVersion)).
+		WithFile("/bin/syft", syft).
+		WithMountedDirectory("/src", directory).WithWorkdir("/src").
+		WithMountedCache("/go/pkg/mod", client.CacheVolume("gomod")).
+		WithEnvVariable("TINI_SUBREAPER", "true").
+		WithSecretVariable("GITHUB_TOKEN", token)
+
+	if !is_local {
+		// Run Github Release when event is push and ref is a tag
+		_, err := goreleaser.WithExec([]string{"--clean"}).Stderr(ctx)
 
 		if err != nil {
-			panic(err)
+			return "", err
 		}
-		fmt.Println(release)
 
-		// output := release.Directory(appBuildPath)
+		log.Println("Released successfully!")
 
-		// // write contents of container build/ directory to the host
-		// _, err = output.Export(ctx, appBuildPath)
+	} else {
+		// If --local is set, run local release with snapshot and publish container to registry for testing
+		local := goreleaser.WithExec([]string{"--snapshot", "--clean"})
 
-		// if err != nil {
-		// 	panic(err)
-		// }
+		_, err := local.Stderr(ctx)
 
-		log.Println("Release completed successfully!")
+		if err != nil {
+			return "", err
+		}
+
+		log.Println("Build with snapshot completed successfully!")
+
+		// Retrieve the built linux binary file from the container
+		dist := local.Directory(appBuildPath)
+
+		// Export the dist directory when running locally
+		_, err = dist.Export(ctx, appBuildPath)
+
+		if err != nil {
+			return "", err
+		}
+
+		log.Printf("Exported %v to local successfully!", appBuildPath)
+
+		// Retrieve the built linux binary file from the container
+		binary := dist.File(fmt.Sprintf("%s_linux_amd64", appName))
+
+		// Publish
+		// package the binary into a alpine container for publishing
+		publish := client.Container().From("alpine:latest").
+			WithFile(fmt.Sprintf("/bin/%v", appName), binary).
+			WithWorkdir("/bin").
+			WithEntrypoint([]string{fmt.Sprintf("/bin/%v", appName)})
+
+		container_uri, err := publish.Publish(ctx, fmt.Sprintf("ttl.sh/%s:5m", appName))
+
+		if err != nil {
+			return "", err
+		}
+
+		log.Printf("Published to registry successfully! \n %s ", container_uri)
 	}
-	// // Lint
-	// lint, err := client.Container().
-	// 	From(fmt.Sprintf("golangci/golangci-lint:v%s-alpine", golangciLintVersion)).
-	// 	WithMountedCache("/go/pkg/mod", client.CacheVolume("gomod")).
-	// 	WithMountedDirectory("/src", directory).WithWorkdir("/src").
-	// 	WithExec([]string{"golangci-lint", "run", "--color", "always", "--timeout", "2m"}).
-	// 	ExitCode(ctx)
 
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// if lint != 0 {
-	// 	panic(err)
-	// }
-
-	// log.Println("Linter passed successfully!")
-
-	// // Test
-	// golang := client.Container().
-	// 	From(fmt.Sprintf("golang:%s-alpine", goVersion)).
-	// 	WithMountedDirectory("/src", directory).WithWorkdir("/src").
-	// 	WithMountedCache("/go/pkg/mod", client.CacheVolume("gomod")).
-	// 	WithEnvVariable("CGO_ENABLED", "0")
-
-	// test, err := golang.WithExec([]string{"go", "test", "./..."}).
-	// 	ExitCode(ctx)
-
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// if test != 0 {
-	// 	panic(err)
-	// }
-
-	// log.Println("Tests passed successfully!")
-
-	// // Build
-	// builder := golang.WithExec([]string{"go", "build", "-o", fmt.Sprintf("%v/%s", appBuildPath, appName), "."})
-
-	// build, err := builder.ExitCode(ctx)
-
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// if build != 0 {
-	// 	panic(err)
-	// }
-
-	// log.Println("Built binary successfully!")
-
-	// // Publish
-	// // package the binary into a alpine container for publishing
-	// publish := client.Container().From("alpine:latest").
-	// 	WithFile(fmt.Sprintf("/bin/%v", appName), builder.File(fmt.Sprintf("/src/%v/%s", appBuildPath, appName))).
-	// 	WithWorkdir("/bin").
-	// 	WithEntrypoint([]string{fmt.Sprintf("/bin/%v", appName)})
-
-	// image_uri, err := publish.Publish(ctx, fmt.Sprintf("ttl.sh/%s-%s:5m", appName, appVersion))
-
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// log.Printf("Published successfully! \n %s ", image_uri)
-
+	return "Release completed successfully!", nil
 }
