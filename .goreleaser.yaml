@@ -1,6 +1,6 @@
 # This is an example .goreleaser.yml file with some sensible defaults.
 # Make sure to check the documentation at https://goreleaser.com
-
+project_name: dagger-go-example-app
 # setups builds for linux on amd64
 # https://goreleaser.com/customization/build
 before:
@@ -11,10 +11,20 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
+      - darwin
     goarch:
       - "amd64"
+      - "arm64"
+    goamd64:
+    - ""
     ldflags:
     - '-s -w -X main.version={{.Version}} -X main.commit={{.Commit}}'
+    ignore:
+      - goos: linux
+        goarch: 'arm64'
+    binary: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}'
+    no_unique_dist_dir: true
+
 
 # creates SBOMs of all archives using syft
 # https://goreleaser.com/customization/sbom
@@ -31,6 +41,16 @@ release:
 # https://goreleaser.com/customization/checksum
 checksum:
   name_template: 'checksums.txt'
+
+changelog:
+  use: github  
+  filters:
+    # Commit messages matching the regexp listed here will be removed from
+    # the changelog
+    exclude:
+      - 'docs:'
+      - 'ci:'
+      - 'test:'
 
 # config the snapshot name template when using the --snapshot flag
 # https://goreleaser.com/customization/snapshots/
