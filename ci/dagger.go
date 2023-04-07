@@ -40,7 +40,7 @@ func main() {
 
 	// Check if the task argument is valid
 	task := flag.Arg(0)
-	if task != "pull-request" && task != "release" {
+	if task != "pull-request" && task != "release" && task != "semrel" {
 		fmt.Println("Invalid argument. Expected either 'pull-request' or 'release'.")
 		os.Exit(1)
 	}
@@ -67,6 +67,8 @@ func main() {
 	case "pull-request":
 		res, err = pullrequest(ctx, client)
 	case "release":
+		res, err = release(ctx, client)
+	case "semrel":
 		res, err = release(ctx, client)
 	}
 
@@ -195,4 +197,25 @@ func release(ctx context.Context, client *dagger.Client) (string, error) {
 	}
 
 	return "Release completed successfully!", nil
+}
+
+func semrel(ctx context.Context, client *dagger.Client) (string, error) {
+
+	// Get the source code from host directory
+	directory := client.Host().Directory(".")
+
+	// Create the GoReleaser container with the syft binary mounted
+	semrel := client.Container().From("ghcr.io/go-semantic-release/semantic-release:latest").
+		WithMountedDirectory("/src", directory).
+		WithWorkdir("/src").
+		WithMountedCache("/go/pkg/mod", client.CacheVolume("gomod"))
+
+	// Run Github Release when event is push and ref is a tag
+	_, err := semrel.WithExec([]string{"--dry"}).Stderr(ctx)
+
+	if err != nil {
+		return "", err
+	}
+
+	return "Sematic Release completed successfully!", nil
 }
