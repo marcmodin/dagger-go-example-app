@@ -49,7 +49,7 @@ func main() {
 	ctx := context.Background()
 
 	// Create a Dagger client
-	client, err := dagger.Connect(ctx)
+	client, err := dagger.Connect(ctx, dagger.WithLogOutput(os.Stdout))
 	if err != nil {
 		panic(err)
 	}
@@ -69,7 +69,7 @@ func main() {
 	case "release":
 		res, err = release(ctx, client)
 	case "semrel":
-		res, err = release(ctx, client)
+		res, err = semrel(ctx, client)
 	}
 
 	// Handle any errors that occurred during the task execution.
@@ -201,6 +201,9 @@ func release(ctx context.Context, client *dagger.Client) (string, error) {
 
 func semrel(ctx context.Context, client *dagger.Client) (string, error) {
 
+	// Set the Github token from the host environment as a secret
+	token := client.SetSecret("github_token", os.Getenv("GITHUB_TOKEN"))
+
 	// Get the source code from host directory
 	directory := client.Host().Directory(".")
 
@@ -208,7 +211,8 @@ func semrel(ctx context.Context, client *dagger.Client) (string, error) {
 	semrel := client.Container().From("ghcr.io/go-semantic-release/semantic-release:latest").
 		WithMountedDirectory("/src", directory).
 		WithWorkdir("/src").
-		WithMountedCache("/go/pkg/mod", client.CacheVolume("gomod"))
+		WithMountedCache("/go/pkg/mod", client.CacheVolume("gomod")).
+		WithSecretVariable("GITHUB_TOKEN", token)
 
 	// Run Github Release when event is push and ref is a tag
 	_, err := semrel.WithExec([]string{"--dry"}).Stderr(ctx)
