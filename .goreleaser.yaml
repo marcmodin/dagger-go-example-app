@@ -54,15 +54,15 @@ changelog:
       - 'ci:'
       - 'test:'
 
-    groups:
-    - title: Features
-      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
-      order: 0
-    - title: 'Bug fixes'
-      regexp: '^.*?bug(\([[:word:]]+\))??!?:.+$'
-      order: 1
-    - title: Others
-      order: 999
+  groups:
+  - title: Features
+    regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+    order: 0
+  - title: 'Bug fixes'
+    regexp: '^.*?bug(\([[:word:]]+\))??!?:.+$'
+    order: 1
+  - title: Others
+    order: 999
 
 # config the snapshot name template when using the --snapshot flag
 # https://goreleaser.com/customization/snapshots/
