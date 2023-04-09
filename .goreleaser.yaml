@@ -22,14 +22,16 @@ builds:
     ignore:
       - goos: linux
         goarch: 'arm64'
-    binary: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}'
+    binary: '{{ .ProjectName }}-v{{ .Version }}_{{ .Os }}_{{ .Arch }}'
     no_unique_dist_dir: true
 
+archives:
+  - format: binary
 
-# creates SBOMs of all archives using syft
+# creates SBOMs of all binaries using syft
 # https://goreleaser.com/customization/sbom
 sboms:
-  - artifacts: archive
+  - artifacts: binary
 
 # create release draft with the current tag, uploads artifacts and generates a changelog
 # https://goreleaser.com/customization/release/
