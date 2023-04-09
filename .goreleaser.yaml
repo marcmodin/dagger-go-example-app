@@ -17,13 +17,17 @@ builds:
       - -extldflags '-static'
       - -s -w -X main.VERSION={{.Version}}
     no_unique_dist_dir: true
-    binary: '{{ .ProjectName }}-v{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    binary: '{{ .ProjectName }}_v{{ .Version }}_{{ .Os }}_{{ .Arch }}'
 
 archives:
   - format: binary
+    name_template: "{{ .ProjectName }}_v{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
 
 sboms:
   - artifacts: binary
+    documents:
+      - "${artifact}.sbom"
 
 release:
   draft: true
