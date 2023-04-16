@@ -1,15 +1,14 @@
 package main
 
 import (
-	"math/rand"
-	"time"
-	"fmt"
-	"log"
-	"net/http"
-	"io"
 	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"math/rand"
+	"net/http"
+	"time"
 )
-	
 
 type Joke struct {
 	Joke string `json:"joke"`
@@ -56,4 +55,3 @@ func main() {
 
 	fmt.Println(joke)
 }
-
